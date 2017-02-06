@@ -9,7 +9,7 @@ OFFSET = {
     0: set([(x, y) for x, y in BASIC_OFFSET]),
     1: set([(y, -x) for x, y in BASIC_OFFSET]),
     2: set([(-x, y) for x, y in BASIC_OFFSET]),
-    3: set([(-y, -x) for x, y in BASIC_OFFSET]),
+    3: set([(y,  x) for x, y in BASIC_OFFSET]),
 }
 BOARD_SIZE = 10
 PLANE_NUMS = 3
@@ -73,10 +73,8 @@ for i in ALL_PLANES:
 
 
 class Chessboard(object):
-    grid = {}
     def __init__(self):
-        self.build_grid()
-        self.lawful_planes=copy.copy(ALL_PLANES)
+        self.lawful_planes = copy.copy(ALL_PLANES)
         self.lawful_combines = copy.copy(ALL_COMBINES)
         self.grid = {(i, j): CELL_BLANK for i in range(BOARD_SIZE) for j in range(BOARD_SIZE)}
 
@@ -96,19 +94,22 @@ class Chessboard(object):
 class TargetBoard(Chessboard):
 
     def __init__(self,desc_tuples=None):
-        super(TargetBoard).__init__()
+        super(TargetBoard,self).__init__()
+        self.planes = {}
         self._lawful_flag = False
-        if desc_tuples is not None:
-            for item in desc_tuples:
-                self.place(desc_tuples, item)
+        if desc_tuples is None:
+            desc_tuples = random.choice(self.lawful_combines)
+        for item in desc_tuples:
+            self.place(item)
 
     def place(self, desc_tuple):
         plane = PLANES_DICT[desc_tuple]
+        self.planes[desc_tuple] = plane
         for cell in plane.cells:
             self.grid[cell]=CELL_BODY
         self.grid[plane.nose] = CELL_NOSE
         self._lawful_flag = False
-        validation()
+        self.validation()
 
     def validation(self):
         self._lawful_flag = True
@@ -116,39 +117,75 @@ class TargetBoard(Chessboard):
     def is_lawful(self):
         return self._lawful_flag
 
+
 class UncertainBoard(Chessboard):
 
-    def __init__(self,plane_nums=3,mode='auto'):
-        super(UncertainBoard).__init__()
+    def __init__(self, plane_nums=3, mode='auto', desc_tuples = None):
+        super(UncertainBoard, self).__init__()
         self.history = []
         self.history.append(
             {
-                'board': self.grid,
+                'board': self._combines_to_cell_prob(self.lawful_combines),
                 'lawful_combines': self.lawful_combines,
+                'move': (-1, -1)
             }
         )
+        if mode == 'auto':
+            self.is_auto =True
+            self.target = TargetBoard(desc_tuples)
 
-    def build_grid(self):
+    def _combines_to_cell_prob(self, lawful_combines):
+        grid = {
+            (x, y):{
+                CELL_NOSE: 0,
+                CELL_BODY: 0
+            }
+        for x in range(10) for y in range(10)}
+        n = float(len(lawful_combines))
+        for combine in lawful_combines:
+            for desc_tuple in combine:
+                for cord in PLANES_DICT[desc_tuple].cells:
+                    grid[cord][CELL_BODY]+=1
+                grid[PLANES_DICT[desc_tuple].nose][CELL_BODY] -= 1
+                grid[PLANES_DICT[desc_tuple].nose][CELL_NOSE] += 1
+
+        prob_grid = {
+            cord:{
+                CELL_NOSE:grid[cord][CELL_NOSE]/n,
+                CELL_BODY:grid[cord][CELL_BODY]/n,
+            }
+        for cord in grid.keys()}
+
+        return prob_grid
+
+    def compute_entropy(cls, combines):
+        return 0.0
+
+    def predict(self):
+        return []
+
+    def move(self, cord, cell_state, is_probe = True):
+        if cell_state == CELL_NOSE:
+            temp_set = set([(*cord,i) for i in range(4)])
+            lawful_combines = set([combine for combine in self.lawful_combines
+                                   if len(combine.intersection(temp_set)) > 0])
+        if cell_state == CELL_BLANK:
+            temp_set = CELL_TO_PLANE[cord]
+            lawful_combines = set([combine for combine in self.lawful_combines
+                                   if len(combine.intersection(temp_set)) == 0])
+        if cell_state == CELL_BODY:
+            temp_set = CELL_TO_PLANE[cord]
+            lawful_combines = set([combine for combine in self.lawful_combines
+                                   if len(combine.intersection(temp_set)) == 0])
+    def play(self):
         pass
 
-
-
-
-    def move(self,coord,state):
-        pass
-
-    def stage_collapse(self):
-        pass
-
-    def re_compute(self):
-        pass
-
-    def rand_planes(self):
-        pass
-
-    def pick_a_plane(self):
-        pass
-
-    def change_mode(self,mode):
-        pass
-
+    def next(self):
+        card = random.choice(self.predict())
+        state = self.target.get_cell_state(card)
+        self.lawful_combines = self.move(card, state)
+        self.history.append(
+            {
+                board:
+            }
+        )
