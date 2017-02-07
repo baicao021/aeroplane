@@ -1,5 +1,6 @@
 import copy
 import random
+import matplotlib.pyplot as plt
 
 CELL_NOSE = 2
 CELL_BODY = 1
@@ -55,8 +56,8 @@ CONFLICT_PLANES = {}
 for i in ALL_PLANES:
     for j in ALL_PLANES:
         if i.desc_tuple < j.desc_tuple and i.is_conflict(j):
-            CONFLICT_PLANES[i.desc_tuple] = CONFLICT_PLANES.get(i.desc_tuple, []) + [j.desc_tuple]
-            CONFLICT_PLANES[j.desc_tuple] = CONFLICT_PLANES.get(j.desc_tuple, []) + [i.desc_tuple]
+            CONFLICT_PLANES[i.desc_tuple] = CONFLICT_PLANES.get(i.desc_tuple, []) + [j]
+            CONFLICT_PLANES[j.desc_tuple] = CONFLICT_PLANES.get(j.desc_tuple, []) + [i]
 
 ALL_COMBINES = []
 
@@ -81,14 +82,27 @@ class Chessboard(object):
     def get_cell_state(self, cord):
         return self.grid[cord]
 
-    def weave(self,idx=-1):
-        pass
+    def weave(self,grid):
+        color_grid = [[0 for i in range(10)] for j in range(10)]
+        for i in range(10):
+            for j in range(10):
+                color_grid[i][j] = self.cell_color(grid[(i,j)])
+        plt.imshow(color_grid,interpolation = 'none')
+        plt.show()
 
     def reset(self):
         self.__init__()
 
-    def cell_color(self):
-        return 255, 255, 255
+    def cell_color(self, cell):
+        color_dict = {
+            CELL_NOSE : CELL_NOSE,
+            CELL_BODY : CELL_BODY,
+            CELL_BLANK : CELL_BLANK,
+        }
+        if type(cell) == dict:
+            return cell[CELL_NOSE], cell[CELL_BODY], 0.0
+        else:
+            return color_dict[cell]
 
 
 class TargetBoard(Chessboard):
@@ -120,18 +134,21 @@ class TargetBoard(Chessboard):
 
 class UncertainBoard(Chessboard):
 
-    def __init__(self, plane_nums=3, mode='auto', desc_tuples = None):
+    def __init__(self, plane_nums=3, mode='auto', desc_tuples=None):
         super(UncertainBoard, self).__init__()
+        self.state = 'ready'
+        self.card = (-1,-1)
+        self.feedback = -1
         self.history = []
         self.history.append(
             {
                 'board': self._combines_to_cell_prob(self.lawful_combines),
                 'lawful_combines': self.lawful_combines,
-                'move': (-1, -1)
+                'card': (-1, -1)
             }
         )
         if mode == 'auto':
-            self.is_auto =True
+            self.is_auto = True
             self.target = TargetBoard(desc_tuples)
 
     def _combines_to_cell_prob(self, lawful_combines):
@@ -140,7 +157,8 @@ class UncertainBoard(Chessboard):
                 CELL_NOSE: 0,
                 CELL_BODY: 0
             }
-        for x in range(10) for y in range(10)}
+            for x in range(10) for y in range(10)
+        }
         n = float(len(lawful_combines))
         for combine in lawful_combines:
             for desc_tuple in combine:
@@ -148,14 +166,13 @@ class UncertainBoard(Chessboard):
                     grid[cord][CELL_BODY]+=1
                 grid[PLANES_DICT[desc_tuple].nose][CELL_BODY] -= 1
                 grid[PLANES_DICT[desc_tuple].nose][CELL_NOSE] += 1
-
         prob_grid = {
             cord:{
                 CELL_NOSE:grid[cord][CELL_NOSE]/n,
                 CELL_BODY:grid[cord][CELL_BODY]/n,
-            }
-        for cord in grid.keys()}
-
+                }
+            for cord in grid.keys()
+        }
         return prob_grid
 
     def compute_entropy(cls, combines):
@@ -168,24 +185,39 @@ class UncertainBoard(Chessboard):
         if cell_state == CELL_NOSE:
             temp_set = set([(*cord,i) for i in range(4)])
             lawful_combines = set([combine for combine in self.lawful_combines
-                                   if len(combine.intersection(temp_set)) > 0])
+                                   if len(combine.intersection(temp_set)) != 0])
         if cell_state == CELL_BLANK:
             temp_set = CELL_TO_PLANE[cord]
             lawful_combines = set([combine for combine in self.lawful_combines
                                    if len(combine.intersection(temp_set)) == 0])
         if cell_state == CELL_BODY:
-            temp_set = CELL_TO_PLANE[cord]
+            temp_set = CELL_TO_PLANE[cord].difference(set([(*cord,i) for i in range(4)]))
             lawful_combines = set([combine for combine in self.lawful_combines
-                                   if len(combine.intersection(temp_set)) == 0])
-    def play(self):
-        pass
+                                   if len(combine.intersection(temp_set)) != 0])
+        if not is_probe:
+            self.lawful_combines = lawful_combines
+        return lawful_combines
 
-    def next(self):
-        card = random.choice(self.predict())
-        state = self.target.get_cell_state(card)
-        self.lawful_combines = self.move(card, state)
-        self.history.append(
-            {
-                board:
-            }
-        )
+    def play(self):
+        if self.state == 'finish':
+            return
+        if self.state == 'ready':
+            self.card = random.choice(self.predict())
+            if self.is_auto:
+                self.feedback = self.target.get_cell_state(self.card)
+                self.move(self.card,self.feedback,is_probe=False)
+            else:
+                self.state = 'wait'
+                self.feedback = -1
+                print(self.card)
+                return
+        elif self.state == 'wait':
+            if self.feedback != -1:
+                self.move(self.card,self.feedback,is_probe=False)
+                self.state = 'ready'
+
+
+    def weave(self, idx=-1):
+        super(UncertainBoard,self).weave(self.history[idx]['board'])
+
+
