@@ -171,16 +171,40 @@ class UncertainBoard(Chessboard):
         }
         return prob_grid
 
-    def compute_entropy(cls, combines):
-        return 0.0
+    def _entropy(self,a_list):
+        result=0.0
+        for i in a_list:
+            if i != 0:
+                result += -i * math.log(i)
+        return result
+
+    def comp_entropy(self, combines):
+        prob_grid = self._combines_to_cell_prob(combines)
+        return self._entropy([val[CELL_NOSE] for val in prob_grid])
 
     def predict(self):
+        move_list = [item[0] for item in self.move_history]
         prob_grid = self._combines_to_cell_prob(self.lawful_combines)
-        prob_grid = {k:v for k,v in prob_grid.items() if k not in [item[0] for item in self.move_history]}
+        prob_grid = {k:v for k,v in prob_grid.items() if k not in move_list}
         if self.strategy == 'prob':
             guard = max([i[CELL_NOSE] for i in prob_grid.values()])
             alternations = [k for k,v in prob_grid.items() if v[CELL_NOSE]==guard]
-
+        # todo wrong
+        if self.strategy == 'entropy':
+            alternations = []
+            guard = 999
+            for cord in [(i,j) for i in range(10) for j in range(10) if (i,j) not in move_list]:
+                ent = 0
+                for potential_card in (1,2):
+                    print(prob_grid[cord])
+                    if prob_grid[cord][potential_card] not in (0.0,1.0):
+                        probe_combines = self.move(cord,potential_card)
+                        ent += self._entropy(probe_combines)
+                if ent < guard:
+                    guard = ent
+                    alternations = [ent]
+                elif ent == guard:
+                    alternations.append(ent)
         return alternations
 
     def move(self, cord, cell_state, is_probe = True):
