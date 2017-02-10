@@ -169,6 +169,8 @@ class UncertainBoard(Chessboard):
                 }
             for cord in grid.keys()
         }
+        for val in prob_grid.values():
+            val[CELL_BLANK] = 1 - val[CELL_NOSE] - val[CELL_BODY]
         return prob_grid
 
     def _entropy(self,a_list):
@@ -196,13 +198,14 @@ class UncertainBoard(Chessboard):
             guard = 0
             for cord in [(i,j) for i in range(10) for j in range(10) if (i,j) not in move_list]:
                 score = 0
-                for potential_card in (1,2):
+                for potential_card in (0,1,2):
                     #print(prob_grid[cord])
                     if prob_grid[cord][potential_card] != 0.0:
                         probe_combines = self.move(cord,potential_card)
                         ent = self.comp_entropy(probe_combines)
                         score += (origin_ent - ent) * prob_grid[cord][potential_card]
-                if score > guard:
+                #print(cord,score,alternations)
+                if score > guard + 1e-6:
                     guard = score
                     alternations = [cord]
                 elif abs(score - guard) <= 1e-6:
