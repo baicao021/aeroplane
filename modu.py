@@ -180,7 +180,7 @@ class UncertainBoard(Chessboard):
 
     def comp_entropy(self, combines):
         prob_grid = self._combines_to_cell_prob(combines)
-        return self._entropy([val[CELL_NOSE] for val in prob_grid])
+        return self._entropy([val[CELL_NOSE] for val in prob_grid.values()])
 
     def predict(self):
         move_list = [item[0] for item in self.move_history]
@@ -190,21 +190,24 @@ class UncertainBoard(Chessboard):
             guard = max([i[CELL_NOSE] for i in prob_grid.values()])
             alternations = [k for k,v in prob_grid.items() if v[CELL_NOSE]==guard]
         # todo wrong
-        if self.strategy == 'entropy':
+        elif self.strategy == 'entropy':
+            origin_ent = self.comp_entropy(self.lawful_combines)
             alternations = []
-            guard = 999
+            guard = 0
             for cord in [(i,j) for i in range(10) for j in range(10) if (i,j) not in move_list]:
-                ent = 0
+                score = 0
                 for potential_card in (1,2):
-                    print(prob_grid[cord])
-                    if prob_grid[cord][potential_card] not in (0.0,1.0):
+                    #print(prob_grid[cord])
+                    if prob_grid[cord][potential_card] != 0.0:
                         probe_combines = self.move(cord,potential_card)
-                        ent += self._entropy(probe_combines)
-                if ent < guard:
-                    guard = ent
-                    alternations = [ent]
-                elif ent == guard:
-                    alternations.append(ent)
+                        ent = self.comp_entropy(probe_combines)
+                        score += (origin_ent - ent) * prob_grid[cord][potential_card]
+                if score > guard:
+                    guard = score
+                    alternations = [cord]
+                elif abs(score - guard) <= 1e-6:
+                    alternations.append(cord)
+                #print(alternations,ent,guard)
         return alternations
 
     def move(self, cord, cell_state, is_probe = True):
