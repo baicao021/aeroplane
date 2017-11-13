@@ -142,6 +142,7 @@ class UncertainBoard(Chessboard):
         self.card = (-1,-1)
         self.feedback_card = -1
         self.move_history = []
+        self.move_count=0
         self.strategy = 'prob'
         if mode == 'auto':
             self.is_auto = True
@@ -156,12 +157,15 @@ class UncertainBoard(Chessboard):
             for x in range(10) for y in range(10)
         }
         n = float(len(lawful_combines))
+        lawful_plane_dict= {}
         for combine in lawful_combines:
             for desc_tuple in combine:
-                for cord in PLANES_DICT[desc_tuple].cells:
-                    grid[cord][CELL_BODY]+=1
-                grid[PLANES_DICT[desc_tuple].nose][CELL_BODY] -= 1
-                grid[PLANES_DICT[desc_tuple].nose][CELL_NOSE] += 1
+                lawful_plane_dict[desc_tuple] = lawful_plane_dict.get(desc_tuple,0) + 1
+        for desc_tuple, val in lawful_plane_dict.items():
+            for cord in PLANES_DICT[desc_tuple].cells:
+                grid[cord][CELL_BODY]+= val
+            grid[PLANES_DICT[desc_tuple].nose][CELL_BODY] -= val
+            grid[PLANES_DICT[desc_tuple].nose][CELL_NOSE] += val
         prob_grid = {
             cord:{
                 CELL_NOSE:grid[cord][CELL_NOSE]/n,
@@ -193,6 +197,8 @@ class UncertainBoard(Chessboard):
             alternations = [k for k,v in prob_grid.items() if v[CELL_NOSE]==guard]
         # todo wrong
         elif self.strategy == 'entropy':
+            if self.move_count == 0:
+                return([(3,3),(3,6),(6,6),(6,3)])
             origin_ent = self.comp_entropy(self.lawful_combines)
             alternations = []
             guard = 0
@@ -229,6 +235,7 @@ class UncertainBoard(Chessboard):
         if not is_probe:
             self.lawful_combines = lawful_combines
             self.move_history.append((cord,cell_state))
+            self.move_count +=1
         return lawful_combines
 
     def play(self):
